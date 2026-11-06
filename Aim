@@ -1,0 +1,94 @@
+-- Solara/Xeno Compatible: Operation One Raw Script
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- Configuration
+local AIMBOT_ENABLED = true
+local AIM_KEY = Enum.UserInputType.MouseButton2 -- Right Click
+local AIM_SMOOTHNESS = 0.18 -- Adjust to preference (Lower = snappier, Higher = smoother)
+local AIM_FOV = 150 -- Target acquisition area in pixels
+
+-- Viewmodel Tracking (Specific to Operation One engine structure)
+local function getSolaraTarget()
+    local center = Camera.ViewportSize / 2
+    local bestDist = AIM_FOV
+    local bestTarget = nil
+    local viewmodels = workspace:FindFirstChild("Viewmodels")
+    
+    if not viewmodels then return nil end
+
+    for _, model in ipairs(viewmodels:GetChildren()) do
+        if model:IsA("Model") and model.Name ~= "LocalViewmodel" then
+            local torso = model:FindFirstChild("torso") or model:FindFirstChild("head")
+            if torso and torso:IsA("BasePart") and torso.Transparency < 1 then
+                local screenPos, onScreen = Camera:WorldToScreenPoint(torso.Position)
+                if onScreen then
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                    if dist < bestDist then
+                        bestDist = dist
+                        bestTarget = torso
+                    end
+                end
+            end
+        end
+    end
+    return bestTarget
+end
+
+-- Camera-Based Aimbot Loop (Bypasses missing mousemoverel function in Solara)
+RunService.RenderStepped:Connect(function()
+    if not AIMBOT_ENABLED or not UserInputService:IsMouseButtonPressed(AIM_KEY) then return end
+    
+    local target = getSolaraTarget()
+    if target then
+        local desiredLook = CFrame.lookAt(Camera.CFrame.Position, target.Position)
+        Camera.CFrame = Camera.CFrame:Lerp(desiredLook, AIM_SMOOTHNESS)
+    end
+end)
+
+-- Safe Drawing Environment Check for Solara ESP
+local function createSolaraESP(model)
+    if model.Name == "LocalViewmodel" or not Drawing then return end
+    
+    local box = Drawing.new("Square")
+    box.Thickness = 1
+    box.Color = Color3.fromRGB(255, 30, 30)
+    box.Filled = false
+    box.Visible = false
+
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        if not model.Parent or not model:FindFirstChild("torso") then
+            box:Remove()
+            connection:Disconnect()
+            return
+        end
+        
+        local torso = model.torso
+        local pos, onScreen = Camera:WorldToScreenPoint(torso.Position)
+        
+        if onScreen and torso.Transparency < 1 then
+            box.Size = Vector2.new(50, 50)
+            box.Position = Vector2.new(pos.X - 25, pos.Y - 25)
+            box.Visible = true
+        else
+            box.Visible = false
+        end
+    end)
+end
+
+-- Initialize ESP safely
+local viewmodels = workspace:WaitForChild("Viewmodels", 5)
+if viewmodels then
+    for _, v in ipairs(viewmodels:GetChildren()) do
+        if v:IsA("Model") then createSolaraESP(v) end
+    end
+    viewmodels.ChildAdded:Connect(function(v)
+        if v:IsA("Model") then task.wait(0.1) createSolaraESP(v) end
+    end)
+end
+
+print("Solara Operation 1 Script Initialized.")
